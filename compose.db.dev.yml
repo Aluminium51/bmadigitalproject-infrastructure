@@ -1,0 +1,45 @@
+name: bma-db-dev
+
+services:
+  postgres:
+    image: postgres:15.18-alpine3.24
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    # ใช้ 55432 ฝั่งเครื่อง เพื่อแยกจาก PostgreSQL อื่น
+    ports:
+      - "127.0.0.1:55432:5432"
+
+    volumes:
+      - bma_dev_pg_data:/var/lib/postgresql/data
+
+    networks:
+      - db_network
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bma_dev_pg_data:
+    name: infrastructure_bma_dev_pg_data
+
+networks:
+  db_network:

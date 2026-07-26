@@ -1,0 +1,123 @@
+name: bma-app-dev
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-8081}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080/api/v1}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:3000}
+      UPLOAD_STORAGE_DIR: ${UPLOAD_STORAGE_DIR:-/app/uploads}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+
+    expose:
+      - "8081"
+
+    volumes:
+      - bma_dev_uploads:/app/uploads
+
+    # ทำให้ใช้ host.docker.internal ได้ทั้ง Docker Desktop และ Linux
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8081/health/live"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    networks:
+      - app_network
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api/v1
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+
+      # Browser เรียกผ่าน Nginx ด้วย URL เดียวกัน
+      NEXT_PUBLIC_API_URL: /api/v1
+
+      # กรณี Next.js server-side ต้องเรียก Backend
+      BACKEND_URL: http://backend:8081
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+
+    expose:
+      - "3000"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - app_network
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:1.27.5-alpine
+    restart: unless-stopped
+
+    ports:
+      - "8080:80"
+
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+    depends_on:
+      - frontend
+      - backend
+
+    networks:
+      - app_network
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  app_network:
+
+volumes:
+  bma_dev_uploads:
+    name: infrastructure_bma_dev_uploads

@@ -1,0 +1,11 @@
+services:
+  backend:
+    networks:
+      - app_network
+      - bma_private
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+
+networks:
+  bma_private:
+    external: true

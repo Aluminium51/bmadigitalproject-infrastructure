@@ -1,0 +1,9 @@
+services:
+  postgres:
+    networks:
+      - db_network
+      - bma_private
+
+networks:
+  bma_private:
+    external: true
