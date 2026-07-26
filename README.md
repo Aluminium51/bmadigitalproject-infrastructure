@@ -197,6 +197,36 @@ Invoke-WebRequest http://localhost:8080/health/live
 Invoke-WebRequest http://localhost:8080/health/ready
 ~~~
 
+## Server Actions Behind Nginx
+
+Nginx must preserve the host and port when forwarding requests to Next.js. The
+canonical configuration uses the incoming host header:
+
+~~~nginx
+proxy_set_header Host $http_host;
+proxy_set_header X-Forwarded-Host $http_host;
+~~~
+
+This prevents errors such as an origin of `localhost:8088` being compared with
+an `x-forwarded-host` value of `localhost`.
+
+Use one public origin consistently during a session, such as:
+
+~~~text
+http://localhost:8088
+~~~
+
+After changing `nginx/default.conf`, a full Compose shutdown is not required.
+Recreate only the Nginx container:
+
+~~~bash
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --force-recreate nginx
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml exec nginx nginx -t
+~~~
+
+Then hard-refresh the browser before retrying login or registration. A frontend
+image rebuild is not required for an Nginx-only configuration change.
+
 ## Native Linux
 
 Create the private Docker network once:
