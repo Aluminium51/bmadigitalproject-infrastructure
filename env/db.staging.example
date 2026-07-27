@@ -1,0 +1,13 @@
+# Copy to env/db.staging on the Database VM.
+# Never commit the real file.
+
+# Bind PostgreSQL to the Database VM private interface only.
+DATABASE_BIND_ADDRESS=10.20.0.12
+
+POSTGRES_USER=bma_app
+POSTGRES_PASSWORD=replace-with-a-unique-staging-database-password
+POSTGRES_DB=bma_db
+
+# Dedicated read-only backup role. Do not reuse POSTGRES_USER.
+POSTGRES_BACKUP_USER=bma_backup
+POSTGRES_BACKUP_PASSWORD=replace-with-a-unique-backup-password

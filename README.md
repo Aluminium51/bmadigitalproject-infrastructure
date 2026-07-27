@@ -227,6 +227,30 @@ docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop
 Then hard-refresh the browser before retrying login or registration. A frontend
 image rebuild is not required for an Nginx-only configuration change.
 
+## Staging Deployment
+
+The staging artifacts use the production-like two-VM topology and immutable
+registry images:
+
+~~~text
+Application VM: Nginx, Frontend, Backend
+Database VM:    PostgreSQL
+~~~
+
+Files:
+
+- `compose.app.staging.yml`
+- `compose.db.staging.yml`
+- `env/app.staging.example`
+- `env/db.staging.example`
+- `docs/staging-runbook.md`
+
+Follow the complete staging procedure in
+[`docs/staging-runbook.md`](docs/staging-runbook.md). The runbook includes
+dedicated backup-role setup, expected smoke-test responses, browser private-IP
+leakage checks, disposable-environment failure-test rules, and forwarded
+host/port verification for Next.js Server Actions.
+
 ## Native Linux
 
 Create the private Docker network once:

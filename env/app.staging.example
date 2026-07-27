@@ -1,0 +1,22 @@
+# Copy to env/app.staging on the Application VM.
+# Never commit the real file.
+
+BACKEND_IMAGE_REPOSITORY=ghcr.io/replace-with-your-org/bma-backend
+BACKEND_VERSION=replace-with-backend-commit-sha
+FRONTEND_IMAGE_REPOSITORY=ghcr.io/replace-with-your-org/bma-frontend
+FRONTEND_VERSION=replace-with-frontend-commit-sha
+
+DATABASE_URL=postgresql://bma_app:URL_ENCODED_PASSWORD@10.20.0.12:5432/bma_db
+
+PUBLIC_API_URL=https://staging.example.com/api/v1
+CORS_ORIGINS=https://staging.example.com
+JWT_SECRET=replace-with-a-unique-staging-secret-at-least-32-characters
+RESEND_API_KEY=
+
+COOKIE_SECURE=true
+COOKIE_SAME_SITE=lax
+COOKIE_DOMAIN=
+
+NODE_ENV=production
+PORT=8081
+UPLOAD_STORAGE_DIR=/app/uploads

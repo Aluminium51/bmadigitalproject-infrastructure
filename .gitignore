@@ -3,6 +3,12 @@
 .env.*
 !.env.*.example
 
+# Staging/production environment files and TLS material.
+env/*
+!env/*.example
+certs/*
+!certs/.gitkeep
+
 # Database backups and archives.
 backups/
 *.dump
