@@ -16,6 +16,7 @@ const checks = [
   { path: "/health/ready", status: 200, content: "application/json" },
   { path: "/openapi-v1.json", status: 200, content: "application/json" },
   { path: "/docs/", status: 200, content: "text/html" },
+  { path: "/api/v1/projects", status: 401, content: "application/json" },
 ];
 
 async function request(path) {
@@ -72,6 +73,9 @@ for (const assetUrl of [...new Set(assetUrls)]) {
   const response = await fetch(assetUrl, {
     signal: AbortSignal.timeout(15000),
   });
+  if (!response.ok) {
+    throw new Error("Could not fetch browser bundle " + assetUrl);
+  }
   const body = await response.text();
 
   for (const pattern of forbiddenPatterns) {
@@ -87,5 +91,5 @@ for (const assetUrl of [...new Set(assetUrls)]) {
 }
 
 console.log(
-  "Smoke tests passed, including browser-bundle private-IP leakage checks.",
+  "Smoke tests passed, including unauthenticated 401 and browser-bundle private-IP checks.",
 );

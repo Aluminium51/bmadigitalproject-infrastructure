@@ -243,6 +243,9 @@ Files:
 - `compose.db.staging.yml`
 - `env/app.staging.example`
 - `env/db.staging.example`
+- `compose.staging-local.override.yml`
+- `env/app.staging.local` (ignored)
+- `env/db.staging.local` (ignored)
 - `docs/staging-runbook.md`
 
 Follow the complete staging procedure in
@@ -250,6 +253,19 @@ Follow the complete staging procedure in
 dedicated backup-role setup, expected smoke-test responses, browser private-IP
 leakage checks, disposable-environment failure-test rules, and forwarded
 host/port verification for Next.js Server Actions.
+
+For local-only validation on Docker Desktop, create the ignored local files
+from the examples and use the local override:
+
+~~~powershell
+Copy-Item env/app.staging.example env/app.staging.local
+Copy-Item env/db.staging.example env/db.staging.local
+docker compose --env-file env/db.staging.local -f compose.db.staging.yml config
+docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f compose.staging-local.override.yml config
+~~~
+
+The local override uses HTTP on `http://localhost:8080` and PostgreSQL on
+`127.0.0.1:55432`. It is not a staging or production deployment file.
 
 ## Native Linux
 
@@ -309,7 +325,7 @@ docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
 ~~~
 
-Do not use `down -v\) unless you have confirmed that the development data can be deleted. This command may remove PostgreSQL and upload volumes.
+Do not use `down -v` unless you have confirmed that the development data can be deleted. This command may remove PostgreSQL and upload volumes.
 
 ## Helper Scripts
 
@@ -322,7 +338,7 @@ node scripts/backup-db.mjs
 node scripts/restore-db.mjs backups/example.dump
 ~~~
 
-For Native Linux, add `--linux\):
+For Native Linux, add `--linux`:
 
 ~~~bash
 node scripts/compose-db.mjs --linux up -d

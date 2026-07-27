@@ -2,7 +2,7 @@ name: bma-app-staging
 
 services:
   backend:
-    image: ${BACKEND_IMAGE_REPOSITORY:?BACKEND_IMAGE_REPOSITORY is required}:${BACKEND_VERSION:?BACKEND_VERSION is required}
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}:${BACKEND_VERSION:?BACKEND_VERSION is required}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -12,8 +12,8 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL is required}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       UPLOAD_STORAGE_DIR: /app/uploads
-      COOKIE_SECURE: "true"
-      COOKIE_SAME_SITE: lax
+      COOKIE_SECURE: ${COOKIE_SECURE:?COOKIE_SECURE is required}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:?COOKIE_SAME_SITE is required}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
     expose:
@@ -43,14 +43,14 @@ services:
         max-file: "5"
 
   frontend:
-    image: ${FRONTEND_IMAGE_REPOSITORY:?FRONTEND_IMAGE_REPOSITORY is required}:${FRONTEND_VERSION:?FRONTEND_VERSION is required}
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}:${FRONTEND_VERSION:?FRONTEND_VERSION is required}
     restart: unless-stopped
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: /api/v1
       BACKEND_URL: http://backend:8081
-      COOKIE_SECURE: "true"
-      COOKIE_SAME_SITE: lax
+      COOKIE_SECURE: ${COOKIE_SECURE:?COOKIE_SECURE is required}
+      COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:?COOKIE_SAME_SITE is required}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
     expose:
       - "3000"

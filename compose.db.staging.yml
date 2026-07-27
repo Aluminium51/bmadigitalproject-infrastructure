@@ -11,7 +11,7 @@ services:
       POSTGRES_BACKUP_USER: ${POSTGRES_BACKUP_USER:?POSTGRES_BACKUP_USER is required}
       POSTGRES_BACKUP_PASSWORD: ${POSTGRES_BACKUP_PASSWORD:?POSTGRES_BACKUP_PASSWORD is required}
     ports:
-      - "${DATABASE_BIND_ADDRESS:?DATABASE_BIND_ADDRESS is required}:5432:5432"
+      - "${DATABASE_BIND_ADDRESS:?DATABASE_BIND_ADDRESS is required}:${DATABASE_HOST_PORT:?DATABASE_HOST_PORT is required}:5432"
     volumes:
       - bma_staging_pg_data:/var/lib/postgresql/data
     networks:

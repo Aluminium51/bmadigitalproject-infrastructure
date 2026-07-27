@@ -1,9 +1,9 @@
 # Copy to env/app.staging on the Application VM.
 # Never commit the real file.
 
-BACKEND_IMAGE_REPOSITORY=ghcr.io/replace-with-your-org/bma-backend
+BACKEND_IMAGE=ghcr.io/replace-with-your-org/bma-backend
 BACKEND_VERSION=replace-with-backend-commit-sha
-FRONTEND_IMAGE_REPOSITORY=ghcr.io/replace-with-your-org/bma-frontend
+FRONTEND_IMAGE=ghcr.io/replace-with-your-org/bma-frontend
 FRONTEND_VERSION=replace-with-frontend-commit-sha
 
 DATABASE_URL=postgresql://bma_app:URL_ENCODED_PASSWORD@10.20.0.12:5432/bma_db

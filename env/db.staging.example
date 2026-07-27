@@ -3,6 +3,7 @@
 
 # Bind PostgreSQL to the Database VM private interface only.
 DATABASE_BIND_ADDRESS=10.20.0.12
+DATABASE_HOST_PORT=5432
 
 POSTGRES_USER=bma_app
 POSTGRES_PASSWORD=replace-with-a-unique-staging-database-password

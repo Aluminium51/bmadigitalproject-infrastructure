@@ -39,7 +39,7 @@ const sql = [
 ].join("\n");
 
 const command = [
-  "export PGPASSWORD=\"$POSTGRES_PASSWORD\"",
+  'PGPASSWORD="$POSTGRES_PASSWORD"',
   "psql",
   "-v",
   "ON_ERROR_STOP=1",
