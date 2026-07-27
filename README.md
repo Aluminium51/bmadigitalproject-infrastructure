@@ -30,6 +30,70 @@ Never commit real environment files, passwords, tokens, TLS keys, or database
 backups. Do not use `docker compose down -v` unless deleting local data is
 intentional.
 
+## PowerShell Copy/Paste Commands
+
+Use this section when running Docker on Windows PowerShell. Every command is a
+single line, so it can be copied and pasted directly. Do not copy the `\`
+characters from the Linux/macOS examples into PowerShell; `\` is a Bash line
+continuation character and is not valid PowerShell syntax.
+
+Run from the `infrastructure` directory:
+
+```powershell
+Set-Location D:\test-fullstack\bangkok\infrastructure
+```
+
+### First-time local development
+
+```powershell
+Copy-Item .env.db.dev.example .env.db.dev
+Copy-Item .env.app.dev.example .env.app.dev
+docker compose --env-file .env.db.dev -f compose.db.dev.yml config --quiet
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml config --quiet
+docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
+docker compose --env-file .env.db.dev -f compose.db.dev.yml ps
+docker compose --env-file .env.db.dev -f compose.db.dev.yml exec postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml run --rm backend bun run db:migrate
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml run --rm backend bun run db:seed:required
+```
+
+### Start existing local data
+
+```powershell
+docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d
+```
+
+Use `--build` when source code or a Dockerfile changed:
+
+```powershell
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
+```
+
+### Stop without deleting data
+
+```powershell
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml down
+docker compose --env-file .env.db.dev -f compose.db.dev.yml down
+```
+
+### Local production-like staging test
+
+```powershell
+Copy-Item env/app.staging.example env/app.staging.local
+Copy-Item env/db.staging.example env/db.staging.local
+docker compose --env-file env/db.staging.local -f compose.db.staging.yml config --quiet
+docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f compose.staging-local.override.yml config --quiet
+docker compose --env-file env/db.staging.local -f compose.db.staging.yml up -d
+docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f compose.staging-local.override.yml up -d
+Invoke-WebRequest http://localhost:8088/health/live -UseBasicParsing
+Invoke-WebRequest http://localhost:8088/health/ready -UseBasicParsing
+```
+
+The staging-local files are ignored by Git and must contain disposable local
+values only.
+
 ## 1. Local Development with Docker Desktop
 
 This is the normal development workflow for Windows and macOS. PostgreSQL is
