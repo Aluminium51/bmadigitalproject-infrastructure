@@ -1,405 +1,588 @@
-# BMA Digital Project — Dev Run Guide
+# BMA Digital Project Infrastructure
 
-The `infrastructure/` directory is the canonical workflow for running the application in a production-like development environment. It uses two separate Compose stacks:
+This directory is the canonical Docker workflow for the BMA Digital Project.
 
-~~~text
-Database stack
-└── PostgreSQL
+The application and database run in separate Compose stacks:
 
-Application stack
-├── Nginx
-├── Frontend
-└── Backend
-~~~
+```text
+Application stack                 Database stack
+------------------                --------------
+Nginx                             PostgreSQL
+Frontend
+Backend
+```
 
-The `frontend/docker-compose.yml` and `backend/docker-compose.yml` files are temporary legacy transition paths. They are not the primary workflow and must not be used for production.
+The legacy files `frontend/docker-compose.yml` and `backend/docker-compose.yml`
+are temporarily retained for rollback and transition purposes. They are
+deprecated, excluded from CI, and must not be used for production deployment.
 
-## Before You Start
+## Prerequisites
 
-You need Docker Desktop on Windows/macOS, or Docker Engine with the Compose plugin on Linux. The Docker daemon must be running.
+- Docker Desktop on Windows/macOS, or Docker Engine with Compose on Linux.
+- The Docker daemon is running.
+- Commands below are run from this directory:
 
-Open a terminal in the `infrastructure` directory:
+```bash
+cd infrastructure
+```
 
-~~~powershell
-Set-Location D:\test-fullstack\bangkok\infrastructure
-~~~
+Never commit real environment files, passwords, tokens, TLS keys, or database
+backups. Do not use `docker compose down -v` unless deleting local data is
+intentional.
 
-Important:
+## 1. Local Development with Docker Desktop
 
-- Do not commit `.env.db.dev`, `.env.app.dev`, `.env.app.dev.linux`, or real backup files.
-- Database Compose commands must always specify `--env-file .env.db.dev`.
-- Do not use `down -v` if you need to preserve PostgreSQL or uploaded files.
+This is the normal development workflow for Windows and macOS. PostgreSQL is
+published only on the local machine at port `55432`; the backend connects to it
+through `host.docker.internal`.
 
-## Case 1: Start a New Dev Environment
+### First-time setup
 
-Use this flow when the environment files do not exist and this machine has not been configured yet.
-
-### 1. Create the environment files
+Create local environment files:
 
 PowerShell:
 
-~~~powershell
+```powershell
 Copy-Item .env.db.dev.example .env.db.dev
 Copy-Item .env.app.dev.example .env.app.dev
-~~~
+```
 
 Linux/macOS:
 
-~~~bash
+```bash
 cp .env.db.dev.example .env.db.dev
 cp .env.app.dev.example .env.app.dev
-~~~
+chmod 600 .env.db.dev .env.app.dev
+```
 
-Update the files as follows:
+Update both files:
 
 1. Set `POSTGRES_PASSWORD` in `.env.db.dev`.
-2. Use the same password in the `DATABASE_URL` inside `.env.app.dev`.
+2. Use the same password in `.env.app.dev` inside `DATABASE_URL`.
 3. Set `JWT_SECRET` to at least 32 characters.
-4. The default `APP_HTTP_PORT` is 8080. Change it to 8088 if port 8080 is already in use.
-5. If you change the port, update `PUBLIC_API_URL` as well, for example `http://localhost:8088/api/v1`.
+4. Keep `APP_HTTP_PORT=8080`, or change it to an unused port such as `8088`.
+5. If the port changes, update `PUBLIC_API_URL` to match it.
 
-Generate a random JWT secret in PowerShell:
+Example local URLs:
 
-~~~powershell
-$bytes = [byte[]]::new(32)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-[Convert]::ToHexString($bytes).ToLower()
-~~~
+```env
+APP_HTTP_PORT=8080
+PUBLIC_API_URL=http://localhost:8080/api/v1
+DATABASE_URL=postgresql://bma_app:PASSWORD@host.docker.internal:55432/bma_db
+```
 
-Or on Linux/macOS:
+### Validate and start the database
 
-~~~bash
-openssl rand -hex 32
-~~~
+Every database command must explicitly load `.env.db.dev`:
 
-Copy the generated value into `JWT_SECRET` without quotation marks.
+```bash
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  config --quiet
 
-### 2. Validate the Compose configuration
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  up -d
 
-~~~bash
-docker compose --env-file .env.db.dev -f compose.db.dev.yml config
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml config
-~~~
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  ps
 
-### 3. Start PostgreSQL
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  exec postgres \
+  sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
 
-~~~bash
+### Start the application
+
+```bash
+docker compose \
+  --env-file .env.app.dev \
+  -f compose.app.dev.yml \
+  -f compose.desktop.override.yml \
+  up -d --build
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+If `APP_HTTP_PORT=8088`, open `http://localhost:8088` instead.
+
+### First-time migration and required seed
+
+The application container does not migrate or seed automatically. Run these
+commands once for a new database:
+
+```bash
+docker compose \
+  --env-file .env.app.dev \
+  -f compose.app.dev.yml \
+  -f compose.desktop.override.yml \
+  run --rm backend bun run db:migrate
+
+docker compose \
+  --env-file .env.app.dev \
+  -f compose.app.dev.yml \
+  -f compose.desktop.override.yml \
+  run --rm backend bun run db:seed:required
+```
+
+For a disposable development database only, add demo data:
+
+```bash
+docker compose \
+  --env-file .env.app.dev \
+  -f compose.app.dev.yml \
+  -f compose.desktop.override.yml \
+  run --rm backend bun run db:seed:demo
+```
+
+Do not run the demo seed against data that must be preserved.
+
+## 2. Restart an Existing Development Environment
+
+Use this when `.env.db.dev`, `.env.app.dev`, and Docker volumes already exist.
+
+Start PostgreSQL:
+
+```bash
 docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
-docker compose --env-file .env.db.dev -f compose.db.dev.yml ps
-docker compose --env-file .env.db.dev -f compose.db.dev.yml exec postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-~~~
+```
 
-Wait until the PostgreSQL service shows `healthy`.
+Start the application without rebuilding:
 
-### 4. Start the Application stack
+```bash
+docker compose \
+  --env-file .env.app.dev \
+  -f compose.app.dev.yml \
+  -f compose.desktop.override.yml \
+  up -d
+```
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
-~~~
+Rebuild after source or Dockerfile changes:
 
-This starts Nginx, Frontend, and Backend. It does not start PostgreSQL and does not run migrations or seeds automatically.
+```bash
+docker compose \
+  --env-file .env.app.dev \
+  -f compose.app.dev.yml \
+  -f compose.desktop.override.yml \
+  up -d --build
+```
 
-### 5. Run the migration and required seed for the first setup
+Run `db:migrate` only when new migration files exist. Do not run migrations on
+every normal restart.
 
-Run these commands after the Database stack is ready:
+## 3. Local Linux Docker Profile
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml run --rm backend bun run db:migrate
-docker compose --env-file .env.app.dev -f compose.app.dev.yml run --rm backend bun run db:seed:required
-~~~
+Native Linux should use the shared Docker network instead of assuming that
+`host.docker.internal` exists:
 
-The demo seed contains test data only:
+```bash
+docker network create bma_private 2>/dev/null || true
+```
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml run --rm backend bun run db:seed:demo
-~~~
+Create the Linux application environment:
 
-Do not run the demo seed when working with data that must be preserved.
+```bash
+cp .env.app.dev.linux.example .env.app.dev.linux
+```
 
-## Case 2: Start with Existing Environment Values and Data
+Ensure its `DATABASE_URL` uses the PostgreSQL service name:
 
-Use this flow when the environment files and named Docker volumes already exist.
+```env
+DATABASE_URL=postgresql://bma_app:PASSWORD@postgres:5432/bma_db
+```
 
-### 1. Do not overwrite existing environment files
+Start the two stacks:
 
-Do not run the copy commands from Case 1.
+```bash
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  -f compose.db.linux.override.yml \
+  up -d
 
-Check that the existing files are present:
+docker compose \
+  --env-file .env.app.dev.linux \
+  -f compose.app.dev.yml \
+  -f compose.linux.override.yml \
+  up -d --build
+```
 
-~~~powershell
-Get-ChildItem .env.*
-~~~
+Run migration and required seed using the Linux application configuration:
 
-List only environment variable names without displaying secret values:
+```bash
+docker compose \
+  --env-file .env.app.dev.linux \
+  -f compose.app.dev.yml \
+  -f compose.linux.override.yml \
+  run --rm backend bun run db:migrate
 
-~~~powershell
-Get-Content .env.db.dev | ForEach-Object { if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=') { $matches[1] } }
-Get-Content .env.app.dev | ForEach-Object { if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=') { $matches[1] } }
-~~~
+docker compose \
+  --env-file .env.app.dev.linux \
+  -f compose.app.dev.yml \
+  -f compose.linux.override.yml \
+  run --rm backend bun run db:seed:required
+```
 
-Verify that the user, password, and database in `DATABASE_URL` match `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`.
+## 4. Local Production-like Staging Test
 
-### 2. Start the existing Database stack
+This uses production-style images and configuration, but remains local and
+disposable. It is not a real staging or production deployment.
 
-~~~bash
-docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
-docker compose --env-file .env.db.dev -f compose.db.dev.yml ps
-docker compose --env-file .env.db.dev -f compose.db.dev.yml logs --tail=100 postgres
-~~~
+Create ignored local files:
 
-The existing named volume, such as `infrastructure_bma_dev_pg_data`, will be reused and existing data will not be deleted.
-
-### 3. Start the existing Application stack
-
-Use this command when the Dockerfile or source code needs to be rebuilt:
-
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
-~~~
-
-If no rebuild is needed:
-
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d
-~~~
-
-Recreating the Application stack does not delete the PostgreSQL volume and does not change the database schema automatically.
-
-### 4. Run migrations only when new migrations exist
-
-When the release or database schema has changed, run:
-
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml run --rm backend bun run db:migrate
-~~~
-
-You do not need to run migrations every time the application starts. You also do not need to run the required seed every time unless new required reference data has been added.
-
-## URLs for Checking the Application
-
-The default value is `APP_HTTP_PORT=8080`:
-
-~~~text
-Application: http://localhost:8080
-Live health: http://localhost:8080/health/live
-Ready health: http://localhost:8080/health/ready
-OpenAPI:     http://localhost:8080/openapi-v1.json
-Docs:        http://localhost:8080/docs/
-API:         http://localhost:8080/api/v1/
-~~~
-
-If you use port 8088, replace 8080 with 8088 in all URLs.
-
-PowerShell:
-
-~~~powershell
-Invoke-WebRequest http://localhost:8080/health/live
-Invoke-WebRequest http://localhost:8080/health/ready
-~~~
-
-## Server Actions Behind Nginx
-
-Nginx must preserve the host and port when forwarding requests to Next.js. The
-canonical configuration uses the incoming host header:
-
-~~~nginx
-proxy_set_header Host $http_host;
-proxy_set_header X-Forwarded-Host $http_host;
-~~~
-
-This prevents errors such as an origin of `localhost:8088` being compared with
-an `x-forwarded-host` value of `localhost`.
-
-Use one public origin consistently during a session, such as:
-
-~~~text
-http://localhost:8088
-~~~
-
-After changing `nginx/default.conf`, a full Compose shutdown is not required.
-Recreate only the Nginx container:
-
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --force-recreate nginx
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml exec nginx nginx -t
-~~~
-
-Then hard-refresh the browser before retrying login or registration. A frontend
-image rebuild is not required for an Nginx-only configuration change.
-
-## Staging Deployment
-
-The staging artifacts use the production-like two-VM topology and immutable
-registry images:
-
-~~~text
-Application VM: Nginx, Frontend, Backend
-Database VM:    PostgreSQL
-~~~
-
-Files:
-
-- `compose.app.staging.yml`
-- `compose.db.staging.yml`
-- `env/app.staging.example`
-- `env/db.staging.example`
-- `compose.staging-local.override.yml`
-- `env/app.staging.local` (ignored)
-- `env/db.staging.local` (ignored)
-- `docs/staging-runbook.md`
-
-Follow the complete staging procedure in
-[`docs/staging-runbook.md`](docs/staging-runbook.md). The runbook includes
-dedicated backup-role setup, expected smoke-test responses, browser private-IP
-leakage checks, disposable-environment failure-test rules, and forwarded
-host/port verification for Next.js Server Actions.
-
-For local-only validation on Docker Desktop, create the ignored local files
-from the examples and use the local override:
-
-~~~powershell
+```powershell
 Copy-Item env/app.staging.example env/app.staging.local
 Copy-Item env/db.staging.example env/db.staging.local
-docker compose --env-file env/db.staging.local -f compose.db.staging.yml config
-docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f compose.staging-local.override.yml config
-~~~
+```
 
-The local override uses HTTP on `http://localhost:8080` and PostgreSQL on
-`127.0.0.1:55432`. It is not a staging or production deployment file.
+Use fake local credentials and local image names/tags in those files. Validate:
 
-## Native Linux
+```bash
+docker compose \
+  --env-file env/db.staging.local \
+  -f compose.db.staging.yml \
+  config --quiet
 
-Create the private Docker network once:
+docker compose \
+  --env-file env/app.staging.local \
+  -f compose.app.staging.yml \
+  -f compose.staging-local.override.yml \
+  config --quiet
+```
 
-~~~bash
-docker network create bma_private
-~~~
+Start the database first:
 
-Create the Linux environment file:
+```bash
+docker compose \
+  --env-file env/db.staging.local \
+  -f compose.db.staging.yml \
+  up -d
+```
 
-~~~bash
-cp .env.app.dev.linux.example .env.app.dev.linux
-~~~
+Start the application stack:
 
-Ensure that `DATABASE_URL` points to `postgres:5432`, then start both stacks:
+```bash
+docker compose \
+  --env-file env/app.staging.local \
+  -f compose.app.staging.yml \
+  -f compose.staging-local.override.yml \
+  up -d
+```
 
-~~~bash
-docker compose --env-file .env.db.dev -f compose.db.dev.yml -f compose.db.linux.override.yml up -d
-docker compose --env-file .env.app.dev.linux -f compose.app.dev.yml -f compose.linux.override.yml up -d --build
-~~~
+The local staging override normally uses `http://localhost:8088`.
 
-Run the migration and required seed:
+Run migration and required seed only against disposable local data:
 
-~~~bash
-docker compose --env-file .env.app.dev.linux -f compose.app.dev.yml -f compose.linux.override.yml run --rm backend bun run db:migrate
-docker compose --env-file .env.app.dev.linux -f compose.app.dev.yml -f compose.linux.override.yml run --rm backend bun run db:seed:required
-~~~
+```bash
+docker compose \
+  --env-file env/app.staging.local \
+  -f compose.app.staging.yml \
+  -f compose.staging-local.override.yml \
+  run --rm backend bun run db:migrate
 
-## Stop and Start Again
+docker compose \
+  --env-file env/app.staging.local \
+  -f compose.app.staging.yml \
+  -f compose.staging-local.override.yml \
+  run --rm backend bun run db:seed:required
+```
 
-Stop the services while preserving containers and volumes:
+Check the local staging stack:
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml stop
-docker compose --env-file .env.db.dev -f compose.db.dev.yml stop
-~~~
+```powershell
+Invoke-WebRequest http://localhost:8088/health/live -UseBasicParsing
+Invoke-WebRequest http://localhost:8088/health/ready -UseBasicParsing
+Invoke-WebRequest http://localhost:8088/openapi-v1.json -UseBasicParsing
+```
 
-Start the existing containers again:
+For the complete local validation procedure, see
+[`docs/local-runtime-validation.md`](docs/local-runtime-validation.md).
 
-~~~bash
-docker compose --env-file .env.db.dev -f compose.db.dev.yml start
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml start
-~~~
+## 5. Real Staging or Production Deployment
 
-Remove containers and networks while preserving volumes:
+The real deployment uses two VMs:
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml down
-docker compose --env-file .env.db.dev -f compose.db.dev.yml down
-~~~
+```text
+Application VM: Nginx, Frontend, Backend
+Database VM:    PostgreSQL
+```
 
-Start the stacks again with a fresh application build:
+The database stack must be deployed separately on the Database VM. The
+application stack must never include PostgreSQL.
 
-~~~bash
-docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
-~~~
+### Database VM
 
-Do not use `down -v` unless you have confirmed that the development data can be deleted. This command may remove PostgreSQL and upload volumes.
+Copy `env/db.vm2.staging.example` or `env/db.staging.example` to a protected
+environment file on the Database VM. Replace all placeholders with real
+staging values. Set `DATABASE_BIND_ADDRESS` to the Database VM private IP and
+allow port 5432 only from the Application VM firewall address.
 
-## Helper Scripts
+Validate and start PostgreSQL:
 
-The helper scripts pass the correct `--env-file` to Docker Compose and work in PowerShell, Command Prompt, and POSIX shells:
+```bash
+docker compose \
+  --env-file /opt/bma/env/db.staging \
+  -f /opt/bma/infrastructure/compose.db.staging.yml \
+  config --quiet
 
-~~~bash
-node scripts/compose-db.mjs up -d
-node scripts/compose-app.mjs up -d --build
-node scripts/backup-db.mjs
-node scripts/restore-db.mjs backups/example.dump
-~~~
+docker compose \
+  --env-file /opt/bma/env/db.staging \
+  -f /opt/bma/infrastructure/compose.db.staging.yml \
+  up -d
 
-For Native Linux, add `--linux`:
+docker compose \
+  --env-file /opt/bma/env/db.staging \
+  -f /opt/bma/infrastructure/compose.db.staging.yml \
+  ps
+```
 
-~~~bash
-node scripts/compose-db.mjs --linux up -d
-node scripts/compose-app.mjs --linux up -d --build
-~~~
+Create the dedicated backup role and run it twice to verify idempotency:
 
-## Troubleshooting
+```bash
+node /opt/bma/infrastructure/ensure-backup-role.mjs \
+  --env-file /opt/bma/env/db.staging \
+  --compose-file /opt/bma/infrastructure/compose.db.staging.yml
+```
 
-### Backend is unhealthy because of JWT_SECRET
+### Application VM
 
-Update `JWT_SECRET` in `.env.app.dev` to at least 32 characters, then recreate the Application stack:
+Install the protected `env/app.staging` file. It must use the Database VM
+private address in `DATABASE_URL`, for example:
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
-~~~
+```env
+DATABASE_URL=postgresql://bma_app:PASSWORD@192.168.1.249:5432/bma_db
+PUBLIC_API_URL=https://staging.example.com/api/v1
+COOKIE_SECURE=true
+```
 
-### Port 8080 is already in use
+Pull immutable image versions and validate the Compose configuration:
 
-Set these values in `.env.app.dev`:
+```bash
+docker compose \
+  --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  config --quiet
 
-~~~env
-APP_HTTP_PORT=8088
-PUBLIC_API_URL=http://localhost:8088/api/v1
-~~~
+docker compose \
+  --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  pull
+```
 
-Then run:
+Before starting the new application version, create a database backup. Then
+run the migration as a one-off Backend container:
 
-~~~bash
-docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d
-~~~
+```bash
+docker compose \
+  --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  run --rm backend bun run db:migrate
+```
 
-### View logs
+Run `db:seed:required` only when the release adds required reference data.
+Never run `db:seed:demo` on staging or production.
 
-~~~bash
+Start the application:
+
+```bash
+docker compose \
+  --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  up -d
+```
+
+Verify `/health/live`, `/health/ready`, `/openapi-v1.json`, `/docs/`, and the
+browser application before declaring the deployment successful. See
+[`docs/staging-runbook.md`](docs/staging-runbook.md) for the full staging gate.
+
+Production deployment must use approved secret storage, TLS, firewall rules,
+immutable image versions, external backups, and a reviewed rollback plan.
+
+## 6. Health Checks and Useful Commands
+
+Local development URLs are usually:
+
+```text
+Application: http://localhost:8080
+Live:        http://localhost:8080/health/live
+Ready:       http://localhost:8080/health/ready
+OpenAPI:     http://localhost:8080/openapi-v1.json
+Docs:        http://localhost:8080/docs/
+```
+
+Replace `8080` with `8088` when using the local staging override.
+
+View application logs:
+
+```bash
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml logs -f backend
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml logs -f frontend
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml logs -f nginx
-docker compose --env-file .env.db.dev -f compose.db.dev.yml logs -f postgres
-~~~
+```
+
+View database logs:
+
+```bash
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  logs -f postgres
+```
+
+Check the database from inside its container:
+
+```bash
+docker compose \
+  --env-file .env.db.dev \
+  -f compose.db.dev.yml \
+  exec postgres \
+  sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT current_database(), current_user;"'
+```
+
+## 7. Stop, Restart, and Remove Containers
+
+Stop services while preserving containers and volumes:
+
+```bash
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml stop
+docker compose --env-file .env.db.dev -f compose.db.dev.yml stop
+```
+
+Start them again:
+
+```bash
+docker compose --env-file .env.db.dev -f compose.db.dev.yml start
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml start
+```
+
+Remove containers and networks while preserving volumes:
+
+```bash
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml down
+docker compose --env-file .env.db.dev -f compose.db.dev.yml down
+```
+
+Start again later with:
+
+```bash
+docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
+```
+
+Do not use `down -v` on a database or upload stack unless the data is
+disposable and deletion is intentional.
+
+## 8. Backups
+
+A Docker volume is persistence, not a backup. Back up PostgreSQL and uploaded
+files separately.
+
+Local database backup:
+
+```bash
+node scripts/backup-db.mjs
+```
+
+The script explicitly loads `.env.db.dev` and writes a custom-format dump to
+`backups/`. Do not commit that directory.
+
+Real staging backup:
+
+```bash
+node /opt/bma/infrastructure/backup-staging-db.mjs \
+  --env-file /opt/bma/env/db.staging \
+  --compose-file /opt/bma/infrastructure/compose.db.staging.yml \
+  --output-dir /opt/bma/backups/database
+```
+
+Copy backups outside the Database VM and test restores in a disposable
+database. Upload backups require the separate upload backup script.
+
+## 9. Troubleshooting
+
+### Backend is unhealthy
+
+Check the backend logs. A common cause is a short JWT secret. Set
+`JWT_SECRET` to at least 32 characters and recreate the application stack:
+
+```bash
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
+```
+
+### Port 8080 is already in use
+
+Set this in `.env.app.dev`:
+
+```env
+APP_HTTP_PORT=8088
+PUBLIC_API_URL=http://localhost:8088/api/v1
+```
+
+Then recreate Nginx:
+
+```bash
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --force-recreate nginx
+```
+
+### Database commands fail with “no configuration file provided”
+
+Always provide both the environment file and Compose file:
+
+```bash
+docker compose --env-file .env.db.dev -f compose.db.dev.yml ps
+```
 
 ### Backend cannot connect to PostgreSQL on Docker Desktop
 
-Confirm that the Database stack is healthy and that `DATABASE_URL` uses this format:
+Confirm that PostgreSQL is healthy and that the backend uses:
 
-~~~text
+```text
 postgresql://USER:PASSWORD@host.docker.internal:55432/DATABASE
-~~~
+```
 
-Check the port from PowerShell:
+On native Linux, use the Linux network override and the `postgres` service name
+instead. Do not assume Docker Desktop networking works identically on Linux.
 
-~~~powershell
-Test-NetConnection localhost -Port 55432
-~~~
+### Next.js Server Actions report a forwarded-host mismatch
 
-## Daily Start Summary
+Use one public origin consistently, such as `http://localhost:8088`. Ensure
+Nginx forwards the incoming host and port:
 
-Once the environment files and volumes already exist, run:
+```nginx
+proxy_set_header Host $http_host;
+proxy_set_header X-Forwarded-Host $http_host;
+```
 
-~~~bash
+After changing Nginx configuration, recreate only Nginx and retry the request.
+
+## Canonical Workflow Summary
+
+For normal local development with existing data:
+
+```bash
 docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
-~~~
+```
 
-Then open `http://localhost:8080`, or the port configured in `APP_HTTP_PORT`.
+For production-like deployment:
+
+1. Start and verify PostgreSQL on the separate Database VM.
+2. Create a pre-migration backup.
+3. Pull immutable application images on the Application VM.
+4. Run `db:migrate` as a one-off Backend container.
+5. Run required seed only when needed.
+6. Start Backend, Frontend, and Nginx.
+7. Verify health, authentication, uploads, and application smoke tests.
+
+Do not run `db:generate` during deployment, do not run demo seed in production,
+and do not assume application rollback reverses a database migration.

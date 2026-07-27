@@ -1,0 +1,14 @@
+# Copy to /opt/bma/env/db.staging on DGTPROJECT02.
+# Never commit the real file. Use staging-only credentials.
+
+# The Compose file uses these existing variable names for the VM2 private bind.
+DATABASE_BIND_ADDRESS=172.27.168.249
+DATABASE_HOST_PORT=5432
+
+POSTGRES_IMAGE=postgres:15.18-alpine3.24
+POSTGRES_USER=bma_app
+POSTGRES_PASSWORD=replace-with-a-unique-staging-password
+POSTGRES_DB=bma_db
+
+POSTGRES_BACKUP_USER=bma_backup
+POSTGRES_BACKUP_PASSWORD=replace-with-a-unique-backup-password
