@@ -48,6 +48,8 @@ Set-Location D:\test-fullstack\bangkok\infrastructure
 ```powershell
 Copy-Item .env.db.dev.example .env.db.dev
 Copy-Item .env.app.dev.example .env.app.dev
+
+# Make sure to set a strong password in both files, and set JWT_SECRET to at least 32 characters before running the commands.
 docker compose --env-file .env.db.dev -f compose.db.dev.yml config --quiet
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml config --quiet
 docker compose --env-file .env.db.dev -f compose.db.dev.yml up -d
@@ -56,6 +58,9 @@ docker compose --env-file .env.db.dev -f compose.db.dev.yml exec postgres sh -c 
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml up -d --build
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml run --rm backend bun run db:migrate
 docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml run --rm backend bun run db:seed:required
+
+# Optional demo seed for disposable development database only
+docker compose --env-file .env.app.dev -f compose.app.dev.yml -f compose.desktop.override.yml run --rm backend bun run db:seed:demo
 ```
 
 ### Start existing local data
@@ -83,6 +88,8 @@ docker compose --env-file .env.db.dev -f compose.db.dev.yml down
 ```powershell
 Copy-Item env/app.staging.example env/app.staging.local
 Copy-Item env/db.staging.example env/db.staging.local
+
+# Make sure to set fake local credentials and local image names/tags in those files before running the commands.
 docker compose --env-file env/db.staging.local -f compose.db.staging.yml config --quiet
 docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f compose.staging-local.override.yml config --quiet
 docker compose --env-file env/db.staging.local -f compose.db.staging.yml up -d
