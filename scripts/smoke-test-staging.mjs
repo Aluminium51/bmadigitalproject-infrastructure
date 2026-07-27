@@ -66,6 +66,11 @@ const forbiddenPatterns = [
   /postgresql:\/\//i,
   /:5432(?:\b|\/)/i,
   /:8081(?:\b|\/)/i,
+  /localhost:3000/i,
+  /localhost:8081/i,
+  /DATABASE_URL/i,
+  /POSTGRES_PASSWORD/i,
+  /JWT_SECRET/i,
   /(?:10\.\d{1,3}|192\.168\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1]))\.\d{1,3}\.\d{1,3}/i,
 ];
 
