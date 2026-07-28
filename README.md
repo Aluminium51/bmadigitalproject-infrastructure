@@ -391,6 +391,19 @@ Database VM:    PostgreSQL
 The database stack must be deployed separately on the Database VM. The
 application stack must never include PostgreSQL.
 
+Before running any remote command, confirm that VM1 and VM2 have unique,
+approved private IP addresses. The previously observed VM addresses conflicted
+with the deployment plan, and `172.27.219.33` appeared on both VMs. Do not use
+that duplicate address. Until the network is approved, use placeholders only:
+
+```text
+Application VM private IP: <APP_VM_PRIVATE_IP>
+Database VM private IP:    <DB_VM_PRIVATE_IP>
+```
+
+Real PostgreSQL and Application VM deployment remain blocked until the network,
+SSH access, sudo access, and recovery access are confirmed.
+
 ### Database VM
 
 Copy `env/db.vm2.staging.example` or `env/db.staging.example` to a protected
@@ -405,22 +418,23 @@ docker compose \
   --env-file /opt/bma/env/db.staging \
   -f /opt/bma/infrastructure/compose.db.staging.yml \
   config --quiet
+```
 
-docker compose \
-  --env-file /opt/bma/env/db.staging \
-  -f /opt/bma/infrastructure/compose.db.staging.yml \
-  up -d
+Start it through the guarded VM2 wrapper. Replace the placeholder only after
+the network gate has approved the final unique Database VM address:
 
-docker compose \
-  --env-file /opt/bma/env/db.staging \
-  -f /opt/bma/infrastructure/compose.db.staging.yml \
-  ps
+```bash
+DB_ENV_FILE=/opt/bma/env/db.staging \
+DB_COMPOSE_FILE=/opt/bma/infrastructure/compose.db.staging.yml \
+EXPECTED_BIND_ADDRESS=<DB_VM_PRIVATE_IP> \
+EXPECTED_BIND_PORT=5432 \
+bash /opt/bma/infrastructure/scripts/deploy-db-vm2.sh
 ```
 
 Create the dedicated backup role and run it twice to verify idempotency:
 
 ```bash
-node /opt/bma/infrastructure/ensure-backup-role.mjs \
+node /opt/bma/infrastructure/scripts/ensure-backup-role.mjs \
   --env-file /opt/bma/env/db.staging \
   --compose-file /opt/bma/infrastructure/compose.db.staging.yml
 ```
@@ -431,7 +445,7 @@ Install the protected `env/app.staging` file. It must use the Database VM
 private address in `DATABASE_URL`, for example:
 
 ```env
-DATABASE_URL=postgresql://bma_app:PASSWORD@192.168.1.249:5432/bma_db
+DATABASE_URL=postgresql://bma_app:PASSWORD@<DB_VM_PRIVATE_IP>:5432/bma_db
 PUBLIC_API_URL=https://staging.example.com/api/v1
 COOKIE_SECURE=true
 ```
@@ -570,7 +584,7 @@ The script explicitly loads `.env.db.dev` and writes a custom-format dump to
 Real staging backup:
 
 ```bash
-node /opt/bma/infrastructure/backup-staging-db.mjs \
+node /opt/bma/infrastructure/scripts/backup-staging-db.mjs \
   --env-file /opt/bma/env/db.staging \
   --compose-file /opt/bma/infrastructure/compose.db.staging.yml \
   --output-dir /opt/bma/backups/database

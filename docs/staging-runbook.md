@@ -23,6 +23,9 @@ Production is still blocked until the complete staging and production-readiness 
 - Keep actual environment files outside Git.
 - Do not print secrets in shell output or CI logs.
 - Database backups must use the dedicated `bma_backup` role, not `bma_app`.
+- Stop if VM1 or VM2 has a missing, duplicate, or unapproved private IP.
+- Stop if PostgreSQL binds to a wildcard address or an unknown process owns port 5432.
+- Do not continue when SSH, sudo, or console recovery access is unavailable.
 
 ## Prerequisites
 
@@ -33,6 +36,16 @@ Production is still blocked until the complete staging and production-readiness 
 - Registry pull credentials.
 - Docker Engine and Compose on both VMs.
 - Firewall access from Application VM to Database VM port 5432.
+
+Before remote execution, confirm the final VM addresses. The previous
+observations showed addresses that did not match the original plan and a
+duplicate `172.27.219.33` on both VMs. Do not use that duplicate address. Keep
+the following values as placeholders until the network owner approves them:
+
+```text
+Application VM private IP: <APP_VM_PRIVATE_IP>
+Database VM private IP:    <DB_VM_PRIVATE_IP>
+```
 
 Create the actual environment files:
 
@@ -54,19 +67,25 @@ Validate the Database Compose configuration:
 docker compose --env-file env/db.staging -f compose.db.staging.yml config
 ~~~
 
-Start PostgreSQL:
+Start PostgreSQL through the guarded deployment wrapper:
 
 ~~~bash
-docker compose --env-file env/db.staging -f compose.db.staging.yml up -d
-docker compose --env-file env/db.staging -f compose.db.staging.yml ps
+DB_ENV_FILE=/opt/bma/env/db.staging \
+DB_COMPOSE_FILE=/opt/bma/infrastructure/compose.db.staging.yml \
+EXPECTED_BIND_ADDRESS=<DB_VM_PRIVATE_IP> \
+EXPECTED_BIND_PORT=5432 \
+bash /opt/bma/infrastructure/scripts/deploy-db-vm2.sh
 ~~~
 
-The database port is bound to `DATABASE_BIND_ADDRESS:5432`. The host firewall must allow that port only from the Application VM private IP.
+The database port is bound to `DATABASE_BIND_ADDRESS:5432`. The host firewall
+must allow that port only from the approved Application VM private IP. The
+wrapper waits for PostgreSQL readiness and prints recent logs if the bounded
+wait fails.
 
 Create or update the dedicated read-only backup role:
 
 ~~~bash
-node scripts/ensure-backup-role.mjs --env-file env/db.staging --compose-file compose.db.staging.yml
+node /opt/bma/infrastructure/scripts/ensure-backup-role.mjs --env-file /opt/bma/env/db.staging --compose-file /opt/bma/infrastructure/compose.db.staging.yml
 ~~~
 
 Verify the role permissions using a privileged administrative session:
@@ -145,14 +164,14 @@ Run from the Application VM or an approved test host.
 Linux/macOS:
 
 ~~~bash
-STAGING_BASE_URL=https://staging.example.com node scripts/smoke-test-staging.mjs
+STAGING_BASE_URL=https://staging.example.com node /opt/bma/infrastructure/scripts/smoke-test-staging.mjs
 ~~~
 
 PowerShell:
 
 ~~~powershell
 $env:STAGING_BASE_URL = "https://staging.example.com"
-node scripts/smoke-test-staging.mjs
+node /opt/bma/infrastructure/scripts/smoke-test-staging.mjs
 ~~~
 
 Expected results:
@@ -204,7 +223,7 @@ Use one canonical origin consistently during the test. Do not switch between a h
 Create a staging database backup only after the dedicated role exists:
 
 ~~~bash
-node scripts/backup-staging-db.mjs
+node /opt/bma/infrastructure/scripts/backup-staging-db.mjs --env-file /opt/bma/env/db.staging --compose-file /opt/bma/infrastructure/compose.db.staging.yml --output-dir /opt/bma/backups/database
 ~~~
 
 The command uses the dedicated role:
@@ -359,12 +378,14 @@ Rules:
 
 ## Known Deployment Targets
 
-These are documented targets only. No connection or configuration has been performed:
+These are unverified planning targets only. No connection or configuration has
+been performed. Replace them only after the network owner approves the final
+unique addresses:
 
 ~~~text
 Application VM
 Hostname: DGTPROJECT01
-Private IP: 172.27.168.248
+Private IP: <APP_VM_PRIVATE_IP>
 OS: Ubuntu 24.04
 CPU: 2 cores
 RAM: 8 GB
@@ -372,7 +393,7 @@ Storage: 200 GB
 
 Database VM
 Hostname: DGTPROJECT02
-Private IP: 172.27.168.249
+Private IP: <DB_VM_PRIVATE_IP>
 OS: Ubuntu 24.04
 CPU: 4 cores
 RAM: 16 GB
@@ -418,7 +439,7 @@ The following section must not be executed during local preparation.
 
 - [ ] Verify hostname, OS, private IP, and disk capacity.
 - [ ] Install Docker Engine and Compose.
-- [ ] Configure the firewall to allow port 5432 only from 172.27.168.248.
+- [ ] Configure the firewall to allow port 5432 only from `<APP_VM_PRIVATE_IP>/32`.
 - [ ] Start PostgreSQL.
 - [ ] Create the application role.
 - [ ] Create and verify the dedicated backup role.

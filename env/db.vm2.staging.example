@@ -2,7 +2,7 @@
 # Never commit the real file. Use staging-only credentials.
 
 # The Compose file uses these existing variable names for the VM2 private bind.
-DATABASE_BIND_ADDRESS=172.27.168.249
+DATABASE_BIND_ADDRESS=replace-with-approved-db-vm-private-ip
 DATABASE_HOST_PORT=5432
 
 POSTGRES_IMAGE=postgres:15.18-alpine3.24
