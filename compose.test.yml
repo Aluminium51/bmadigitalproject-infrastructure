@@ -1,0 +1,23 @@
+name: bma-test
+
+services:
+  postgres:
+    image: postgres:15.18-alpine3.24
+    restart: "no"
+    environment:
+      POSTGRES_USER: bma_test
+      POSTGRES_PASSWORD: bma_test_only_password
+      POSTGRES_DB: bma_test
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - infrastructure_bma_test_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bma_test -d bma_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  infrastructure_bma_test_pg_data:
+    name: infrastructure_bma_test_pg_data
