@@ -7,14 +7,19 @@ The application and database run in separate Compose stacks:
 ```text
 Application stack                 Database stack
 ------------------                --------------
-Nginx                             PostgreSQL
 Frontend
 Backend
+
+Edge options
+------------
+Existing bma-nginx via shared bma_edge network (preferred)
+Project Nginx overlay on alternate ports (review/rollback)
 ```
 
-The legacy files `frontend/docker-compose.yml` and `backend/docker-compose.yml`
-are temporarily retained for rollback and transition purposes. They are
-deprecated, excluded from CI, and must not be used for production deployment.
+The legacy file `frontend/docker-compose.yml` is temporarily retained for
+source-build rollback and transition purposes. There is no supported legacy
+Backend Compose file. The Frontend file is deprecated, excluded from CI, and
+must not be used for staging or production deployment.
 
 ## Prerequisites
 
@@ -86,10 +91,10 @@ docker compose --env-file .env.db.dev -f compose.db.dev.yml down
 ### Local production-like staging test
 
 ```powershell
-Copy-Item env/app.staging.example env/app.staging.local
-Copy-Item env/db.staging.example env/db.staging.local
+Copy-Item env/app.staging.local.example env/app.staging.local
+Copy-Item env/db.staging.local.example env/db.staging.local
 
-# Make sure to set fake local credentials and local image names/tags in those files before running the commands.
+# Make sure to set only disposable local credentials. The local example uses local image references.
 docker compose --env-file env/db.staging.local -f compose.db.staging.yml config --quiet
 docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f compose.staging-local.override.yml config --quiet
 docker compose --env-file env/db.staging.local -f compose.db.staging.yml up -d
@@ -312,8 +317,8 @@ disposable. It is not a real staging or production deployment.
 Create ignored local files:
 
 ```powershell
-Copy-Item env/app.staging.example env/app.staging.local
-Copy-Item env/db.staging.example env/db.staging.local
+Copy-Item env/app.staging.local.example env/app.staging.local
+Copy-Item env/db.staging.local.example env/db.staging.local
 ```
 
 Use fake local credentials and local image names/tags in those files. Validate:
@@ -410,6 +415,25 @@ Database VM private IP:    <DB_VM_PRIVATE_IP>
 Real PostgreSQL and Application VM deployment remain blocked until the network,
 SSH access, sudo access, and recovery access are confirmed.
 
+### Existing Nginx inspection and rollback
+
+Inspect the existing `bma-nginx` before any Project Nginx decision. The
+inspection is read-only and does not restart, stop, replace, or reconfigure it:
+
+```bash
+NGINX_CONTAINER=bma-nginx \
+bash /opt/bma/infrastructure/scripts/inspect-existing-nginx.sh
+```
+
+Compare its reviewed routes, upstreams, TLS settings, body-size limit,
+forwarded headers, WebSocket handling, health routes, and access controls with
+`infrastructure/nginx/staging.conf`. The existing proxy remains the rollback
+path.
+
+Project Nginx defaults to alternate ports `18080` and `18443` so it can be
+tested beside the existing proxy. A cutover to 80/443 requires a separately
+approved change and explicit port values; no repository command performs it.
+
 ### Database VM
 
 Copy `env/db.vm2.staging.example` or `env/db.staging.example` to a protected
@@ -445,6 +469,16 @@ node /opt/bma/infrastructure/scripts/ensure-backup-role.mjs \
   --compose-file /opt/bma/infrastructure/compose.db.staging.yml
 ```
 
+PostgreSQL must not be exposed publicly. For DBeaver, use an SSH tunnel:
+
+```bash
+ssh -N -L 15432:<DB_VM_PRIVATE_IP>:5432 <SSH_USER>@<DB_VM_PRIVATE_IP>
+```
+
+Connect DBeaver to `127.0.0.1:15432`, database `bma_db`, using an approved
+database credential. Do not bind PostgreSQL to `0.0.0.0` or publish public
+port `5432` merely for database administration.
+
 ### Application VM
 
 Install the protected `env/app.staging` file. It must use the Database VM
@@ -455,6 +489,17 @@ DATABASE_URL=postgresql://bma_app:PASSWORD@<DB_VM_PRIVATE_IP>:5432/bma_db
 PUBLIC_API_URL=https://staging.example.com/api/v1
 COOKIE_SECURE=true
 ```
+
+Use full OCI image references and pin the final staging deployment by digest:
+
+```env
+BACKEND_IMAGE_REF=ghcr.io/ORG/bma-backend@sha256:BACKEND_DIGEST
+FRONTEND_IMAGE_REF=ghcr.io/ORG/bma-frontend@sha256:FRONTEND_DIGEST
+```
+
+The Backend and Frontend repositories publish release tags (`v1.2.3`), Git
+SHA tags (`sha-<commit>`), and report the immutable digest in the GitHub Actions
+summary.
 
 Pull immutable image versions and validate the Compose configuration:
 
@@ -598,6 +643,15 @@ node /opt/bma/infrastructure/scripts/backup-staging-db.mjs \
   --env-file /opt/bma/env/db.staging \
   --compose-file /opt/bma/infrastructure/compose.db.staging.yml \
   --output-dir /opt/bma/backups/database
+```
+
+Back up real staging uploads from the bind-mounted host directory, not a
+named application volume:
+
+```bash
+node /opt/bma/infrastructure/scripts/backup-staging-uploads.mjs \
+  --path /opt/bma/uploads \
+  --output-dir /opt/bma/backups/uploads
 ```
 
 Copy backups outside the Database VM and test restores in a disposable

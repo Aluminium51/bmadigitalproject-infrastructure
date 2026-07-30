@@ -1,0 +1,22 @@
+# Disposable local production-like validation only. Never use these values on a VM.
+
+DOMAIN=localhost
+BACKEND_IMAGE_REF=bma-backend:local
+FRONTEND_IMAGE_REF=bma-frontend:local
+
+DATABASE_URL=postgresql://bma_app:local_only_change_me@host.docker.internal:55432/bma_db
+PUBLIC_API_URL=http://localhost:8088/api/v1
+NEXT_PUBLIC_API_URL=/api/v1
+BACKEND_URL=http://backend:8081
+
+NODE_ENV=production
+PORT=8081
+JWT_SECRET=local_only_jwt_secret_not_for_real_use_123456789
+CORS_ORIGINS=http://localhost:8088
+COOKIE_SECURE=false
+COOKIE_SAME_SITE=lax
+COOKIE_DOMAIN=
+UPLOAD_STORAGE_DIR=/app/uploads
+UPLOAD_HOST_PATH=./.local-uploads
+MAX_UPLOAD_SIZE=26214400
+TRUST_PROXY=true

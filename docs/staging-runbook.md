@@ -61,6 +61,15 @@ chmod 600 env/app.staging env/db.staging
 
 Replace all placeholder values before starting.
 
+`env/app.staging` must contain full OCI image references. Use a release or Git
+SHA tag for review, then pin the final deployment to the immutable digest
+emitted by the Backend and Frontend publish workflows:
+
+```env
+BACKEND_IMAGE_REF=ghcr.io/ORG/bma-backend@sha256:BACKEND_DIGEST
+FRONTEND_IMAGE_REF=ghcr.io/ORG/bma-frontend@sha256:FRONTEND_DIGEST
+```
+
 The PostgreSQL password inside `DATABASE_URL` must be URL-encoded if it contains reserved URL characters.
 
 Before any remote deployment, run the read-only Application VM preflight:
@@ -101,6 +110,15 @@ The database port is bound to `DATABASE_BIND_ADDRESS:5432`. The host firewall
 must allow that port only from the approved Application VM private IP. The
 wrapper waits for PostgreSQL readiness and prints recent logs if the bounded
 wait fails.
+
+PostgreSQL must not be exposed publicly. For DBeaver, create an SSH tunnel:
+
+```bash
+ssh -N -L 15432:<DB_VM_PRIVATE_IP>:5432 <SSH_USER>@<DB_VM_PRIVATE_IP>
+```
+
+Use `127.0.0.1:15432` in DBeaver with an approved database credential. Do not
+bind PostgreSQL to `0.0.0.0` or open public port `5432` for administration.
 
 Create or update the dedicated read-only backup role:
 
@@ -198,6 +216,11 @@ docker compose --env-file /opt/bma/env/app.staging \
   up -d
 ~~~
 
+The Project Nginx overlay defaults to alternate ports `18080` and `18443` so it
+can be tested while the existing `bma-nginx` remains active on its current
+ports. A cutover to 80/443 requires explicit approved port overrides. No
+repository command stops or replaces the existing proxy.
+
 The real staging upload contract is `/opt/bma/uploads:/app/uploads`. Local
 disposable validation uses the local override and a disposable named volume.
 
@@ -222,6 +245,26 @@ docker compose --env-file env/app.staging \
 ~~~
 
 Run the required seed twice during initial staging validation and verify that no duplicates are created.
+
+Create the first Super Admin without demo seed or manual SQL. Run this only
+after migration and required lookup seed, using a temporary password supplied
+through `SUPER_ADMIN_PASSWORD`:
+
+~~~bash
+SUPER_ADMIN_PASSWORD='use-a-temporary-secret' \
+docker compose --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
+  run --rm backend bun run db:create-super-admin \
+  -- --username=bootstrap-admin --email=admin@example.com \
+  --first-name=System --last-name=Administrator \
+  --division-code=<APPROVED_DIVISION_CODE>
+~~~
+
+It creates one active, email-verified account with the canonical
+`SUPER_ADMIN` role, refuses duplicate usernames/emails, and never prints the
+password or tokens. Remove the password from the shell environment immediately
+after the command.
 
 Never run `db:generate` on the staging or production server.
 
@@ -315,6 +358,30 @@ Back up uploads separately from PostgreSQL:
 - Restore into a clean upload volume.
 - Verify attachment metadata, preview, and download behavior.
 
+For real staging, the source is the host bind directory:
+
+~~~bash
+node /opt/bma/infrastructure/scripts/backup-staging-uploads.mjs \
+  --path /opt/bma/uploads \
+  --output-dir /opt/bma/backups/uploads
+~~~
+
+Named volumes are reserved for local/disposable validation and restore tests.
+
+Restore an upload archive only into a disposable named volume:
+
+~~~bash
+DISPOSABLE_ENVIRONMENT=true \
+node /opt/bma/infrastructure/scripts/restore-staging-uploads.mjs \
+  --archive /opt/bma/backups/uploads/<ARCHIVE>.tar.gz \
+  --volume bma_local_restore_uploads
+~~~
+
+The restore helper refuses the active staging volume and removes its temporary
+restore volume after verification. Restoring into `/opt/bma/uploads` requires a
+separately approved, documented maintenance procedure; it is not automated by
+this repository.
+
 ## Failure Tests
 
 Run destructive tests only against an explicitly disposable environment:
@@ -354,7 +421,7 @@ Never perform these tests against production.
 - [ ] Upload restore succeeds.
 - [ ] Failure tests are completed only in disposable environments.
 - [ ] Smoke-test evidence is recorded.
-- [ ] Production remains marked NOT READY until PRs 1–7 and final review pass.
+- [ ] Production remains marked NOT READY until all approved staging and production readiness gates pass.
 
 ## Local-Only Validation
 
@@ -363,8 +430,8 @@ This section is for Docker Desktop on the developer machine. It does not configu
 Create ignored local files from the examples:
 
 ~~~powershell
-Copy-Item env/app.staging.example env/app.staging.local
-Copy-Item env/db.staging.example env/db.staging.local
+Copy-Item env/app.staging.local.example env/app.staging.local
+Copy-Item env/db.staging.local.example env/db.staging.local
 ~~~
 
 Replace the local files with fake values from the repository's local examples.
@@ -385,12 +452,15 @@ docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f co
 
 The local override:
 
-- Publishes Nginx on `http://localhost:8080`.
+- Publishes Nginx on `http://localhost:8088`.
 - Uses HTTP instead of TLS.
 - Publishes PostgreSQL only on `127.0.0.1:55432`.
 - Does not alter the canonical staging Compose files.
 
-The canonical staging files do not build source code. If the `local-test` image tags do not exist locally, local runtime testing is blocked until temporary local tags are created or approved registry images are available. Do not add `build:` to the canonical staging files.
+The canonical staging files do not build source code. If the local image tags
+`bma-backend:local` and `bma-frontend:local` do not exist locally, local runtime
+testing is blocked until temporary local tags are created or approved registry
+images are available. Do not add `build:` to the canonical staging files.
 
 Local start sequence:
 
@@ -409,11 +479,11 @@ docker compose --env-file env/app.staging.local -f compose.app.staging.yml -f co
 Local expected URLs:
 
 ~~~text
-http://localhost:8080/
-http://localhost:8080/health/live
-http://localhost:8080/health/ready
-http://localhost:8080/openapi-v1.json
-http://localhost:8080/api/v1/projects
+http://localhost:8088/
+http://localhost:8088/health/live
+http://localhost:8088/health/ready
+http://localhost:8088/openapi-v1.json
+http://localhost:8088/api/v1/projects
 ~~~
 
 The unauthenticated projects request is expected to return `401` with JSON.
@@ -430,13 +500,11 @@ The unauthenticated projects request is expected to return `401` with JSON.
 | `POSTGRES_BACKUP_PASSWORD` | Backup role/script | Fake only | Yes | Yes | Yes |
 | `DATABASE_BIND_ADDRESS` | Database Compose | `127.0.0.1` | DB VM private IP | No | Yes |
 | `DATABASE_HOST_PORT` | Database Compose | `55432` | `5432` | No | Yes |
-| `BACKEND_IMAGE` | Application Compose | Placeholder/local tag | Registry repository | No | Yes |
-| `FRONTEND_IMAGE` | Application Compose | Placeholder/local tag | Registry repository | No | Yes |
-| `BACKEND_VERSION` | Application Compose | `local-test` | Commit SHA | No | Yes |
-| `FRONTEND_VERSION` | Application Compose | `local-test` | Commit SHA | No | Yes |
+| `BACKEND_IMAGE_REF` | Application Compose | `bma-backend:local` | GHCR tag or digest | No | Yes |
+| `FRONTEND_IMAGE_REF` | Application Compose | `bma-frontend:local` | GHCR tag or digest | No | Yes |
 | `JWT_SECRET` | Backend runtime | Fake only | Unique staging secret | Yes | Yes |
-| `PUBLIC_API_URL` | Backend runtime | `http://localhost:8080/api/v1` | Staging HTTPS URL | No | Yes |
-| `CORS_ORIGINS` | Backend runtime | `http://localhost:8080` | Staging HTTPS origin | No | Yes |
+| `PUBLIC_API_URL` | Backend runtime | `http://localhost:8088/api/v1` | Staging HTTPS URL | No | Yes |
+| `CORS_ORIGINS` | Backend runtime | `http://localhost:8088` | Staging HTTPS origin | No | Yes |
 | `COOKIE_SECURE` | Backend/Frontend | `false` | `true` | No | Yes |
 | `COOKIE_SAME_SITE` | Backend/Frontend | `lax` | `lax` | No | Yes |
 | `UPLOAD_STORAGE_DIR` | Backend runtime | `/app/uploads` | `/app/uploads` | No | Yes |

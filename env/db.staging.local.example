@@ -1,0 +1,8 @@
+# Disposable local production-like validation only. Never use these values on a VM.
+DATABASE_BIND_ADDRESS=127.0.0.1
+DATABASE_HOST_PORT=55432
+POSTGRES_USER=bma_app
+POSTGRES_PASSWORD=local_only_change_me
+POSTGRES_DB=bma_db
+POSTGRES_BACKUP_USER=bma_backup
+POSTGRES_BACKUP_PASSWORD=local_only_backup_change_me

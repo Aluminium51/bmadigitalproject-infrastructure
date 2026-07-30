@@ -12,7 +12,15 @@ function option(name, fallback) {
   return index >= 0 ? args[index + 1] : fallback;
 }
 
-const volume = option("--volume", "bma_staging_uploads");
+const sourcePath = option("--path", process.env.UPLOAD_HOST_PATH || "/opt/bma/uploads");
+const sourceVolume = option("--volume", process.env.UPLOAD_VOLUME || "");
+if (sourceVolume && process.env.UPLOAD_HOST_PATH) {
+  throw new Error("Choose either --path/UPLOAD_HOST_PATH or --volume/UPLOAD_VOLUME, not both.");
+}
+const sourceStats = sourceVolume ? undefined : statSync(sourcePath, { throwIfNoEntry: false });
+if (!sourceVolume && !sourceStats?.isDirectory()) {
+  throw new Error(`Upload directory does not exist: ${sourcePath}`);
+}
 const outputDir = resolve(option("--output-dir", "backups"));
 const image = option("--image", "alpine:3.21.3");
 mkdirSync(outputDir, { recursive: true });
@@ -21,6 +29,7 @@ const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 const archiveName = `bma_staging_uploads_${timestamp}.tar.gz`;
 const archivePath = join(outputDir, archiveName);
 const mount = `${outputDir}:/backup`;
+const sourceMount = sourceVolume ? `${sourceVolume}:/source:ro` : `${resolve(sourcePath)}:/source:ro`;
 
 async function docker(args) {
   return execFileAsync("docker", args, { maxBuffer: 2 * 1024 * 1024 });
@@ -30,7 +39,7 @@ const stats = await docker([
   "run",
   "--rm",
   "-v",
-  `${volume}:/source:ro`,
+  sourceMount,
   image,
   "sh",
   "-c",
@@ -42,7 +51,7 @@ await docker([
   "run",
   "--rm",
   "-v",
-  `${volume}:/source:ro`,
+  sourceMount,
   "-v",
   mount,
   image,

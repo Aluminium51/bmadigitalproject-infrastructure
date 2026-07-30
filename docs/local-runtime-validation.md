@@ -5,6 +5,10 @@ Status: `PASSED`
 This report covers the disposable Docker Desktop runtime only. It contains no
 passwords, tokens, cookies, private keys, or full database URLs.
 
+The recorded run predates the local upload-volume rename. Current
+`compose.staging-local.override.yml` uses `bma_staging_local_uploads`; the
+real staging contract uses `/opt/bma/uploads` as a host bind mount.
+
 ## Test Context
 
 - Test date: 2026-07-27 (Asia/Bangkok)

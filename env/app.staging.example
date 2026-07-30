@@ -1,10 +1,13 @@
 # Copy to env/app.staging on the Application VM.
 # Never commit the real file.
 
-BACKEND_IMAGE=ghcr.io/replace-with-your-org/bma-backend
-BACKEND_VERSION=replace-with-backend-commit-sha
-FRONTEND_IMAGE=ghcr.io/replace-with-your-org/bma-frontend
-FRONTEND_VERSION=replace-with-frontend-commit-sha
+# Use a release or sha tag for review. Pin both values to the published
+# immutable digest before staging deployment:
+# ghcr.io/ORG/bma-backend:v1.2.3
+# ghcr.io/ORG/bma-backend:sha-<40-character-git-sha>
+# ghcr.io/ORG/bma-backend@sha256:<digest>
+BACKEND_IMAGE_REF=ghcr.io/replace-with-your-org/bma-backend@sha256:replace-with-published-digest
+FRONTEND_IMAGE_REF=ghcr.io/replace-with-your-org/bma-frontend@sha256:replace-with-published-digest
 
 DATABASE_URL=postgresql://bma_app:URL_ENCODED_PASSWORD@<DB_VM_PRIVATE_IP>:5432/bma_db
 

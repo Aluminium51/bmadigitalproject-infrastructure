@@ -2,7 +2,7 @@ name: bma-app-staging
 
 services:
   backend:
-    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}:${BACKEND_VERSION:?BACKEND_VERSION is required}
+    image: ${BACKEND_IMAGE_REF:?BACKEND_IMAGE_REF is required}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -45,7 +45,7 @@ services:
         max-file: "5"
 
   frontend:
-    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}:${FRONTEND_VERSION:?FRONTEND_VERSION is required}
+    image: ${FRONTEND_IMAGE_REF:?FRONTEND_IMAGE_REF is required}
     restart: unless-stopped
     environment:
       NODE_ENV: production

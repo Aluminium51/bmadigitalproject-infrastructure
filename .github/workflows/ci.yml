@@ -23,6 +23,8 @@ jobs:
         run: bash scripts/ci/scan-active-ip.sh
       - name: Scan obsolete paths
         run: bash scripts/ci/scan-obsolete-paths.sh
+      - name: Scan documentation and path consistency
+        run: bash scripts/ci/scan-doc-consistency.sh
       - name: Scan destructive commands
         run: bash scripts/ci/scan-destructive-commands.sh
       - name: Scan tracked secret files

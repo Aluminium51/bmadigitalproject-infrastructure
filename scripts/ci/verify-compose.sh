@@ -13,10 +13,8 @@ db_env="$tmp_dir/db.env"
 ci_db_address="${CI_COMPOSE_TEST_ADDRESS:-$(printf '%s.%s.%s.%s' 10 254 254 2)}"
 
 cat >"$app_env" <<EOF
-BACKEND_IMAGE=ci/bma-backend
-BACKEND_VERSION=ci
-FRONTEND_IMAGE=ci/bma-frontend
-FRONTEND_VERSION=ci
+BACKEND_IMAGE_REF=ci/bma-backend:ci
+FRONTEND_IMAGE_REF=ci/bma-frontend:ci
 DATABASE_URL=postgresql://bma_app:ci_disposable_password@$ci_db_address:5432/bma_db
 PUBLIC_API_URL=https://staging.example.invalid/api/v1
 CORS_ORIGINS=https://staging.example.invalid

@@ -24,8 +24,8 @@ const image = option("--image", "alpine:3.21.3");
 if (!archivePath || !existsSync(archivePath) || statSync(archivePath).size === 0) {
   throw new Error("A non-empty --archive path is required.");
 }
-if (volume === "bma_staging_uploads") {
-  throw new Error("Refusing to overwrite the active upload volume.");
+if (["bma_staging_uploads", "bma_staging_local_uploads"].includes(volume)) {
+  throw new Error("Refusing to overwrite an active staging or local-validation upload volume.");
 }
 
 async function docker(args) {
