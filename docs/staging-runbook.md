@@ -26,6 +26,10 @@ Production is still blocked until the complete staging and production-readiness 
 - Stop if VM1 or VM2 has a missing, duplicate, or unapproved private IP.
 - Stop if PostgreSQL binds to a wildcard address or an unknown process owns port 5432.
 - Do not continue when SSH, sudo, or console recovery access is unavailable.
+- The existing `bma-nginx` must never proxy containerized Backend or Frontend
+  services through `127.0.0.1`.
+- Shared Docker-network edge integration is preferred. A host-gateway fallback
+  requires an explicit approved gateway address and dedicated override.
 
 ## Prerequisites
 
@@ -58,6 +62,22 @@ chmod 600 env/app.staging env/db.staging
 Replace all placeholder values before starting.
 
 The PostgreSQL password inside `DATABASE_URL` must be URL-encoded if it contains reserved URL characters.
+
+Before any remote deployment, run the read-only Application VM preflight:
+
+~~~bash
+EXPECTED_APP_ADDRESS=<APP_VM_PRIVATE_IP> \
+EXPECTED_HTTP_PORT=80 \
+EXPECTED_HTTPS_PORT=443 \
+UPLOAD_PATH=/opt/bma/uploads \
+MIN_UPLOAD_FREE_GB=10 \
+ROUTE_TEST_DESTINATION=<APPROVED_ROUTE_TEST_DESTINATION> \
+bash /opt/bma/infrastructure/scripts/check-app-vm-preflight.sh
+~~~
+
+The script must report and resolve all `BLOCKED` checks before deployment. It
+does not apply Netplan, alter Docker, change firewall rules, or restart any
+service.
 
 ## Database VM
 
@@ -125,30 +145,80 @@ chmod 600 certs/privkey.pem
 Validate the Application Compose configuration:
 
 ~~~bash
-docker compose --env-file env/app.staging -f compose.app.staging.yml config
+docker compose --env-file env/app.staging \
+  -f compose.app.staging.yml \
+  -f compose.app.staging.external-edge.yml \
+  config --quiet
 ~~~
 
 Pull and start the application stack:
 
 ~~~bash
-docker compose --env-file env/app.staging -f compose.app.staging.yml pull
-docker compose --env-file env/app.staging -f compose.app.staging.yml up -d
+docker compose --env-file env/app.staging \
+  -f compose.app.staging.yml \
+  -f compose.app.staging.external-edge.yml \
+  pull
+docker compose --env-file env/app.staging \
+  -f compose.app.staging.yml \
+  -f compose.app.staging.external-edge.yml \
+  up -d
 ~~~
 
-The staging stack contains only Nginx, Frontend, and Backend.
+The default staging stack contains Frontend and Backend only. It does not bind
+ports 80 or 443. The preferred edge mode uses the approved external
+`bma-nginx` attached to the shared `bma_edge` Docker network:
+
+~~~bash
+docker compose --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
+  config --quiet
+
+docker compose --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
+  up -d
+~~~
+
+An approved operator must attach the existing edge proxy to the shared
+network. This repository does not modify or restart that proxy.
+
+If the existing edge cannot join a shared Docker network, the explicit
+host-gateway fallback may be used only with an approved `APP_BIND_ADDRESS` and
+`EDGE_HOST_GATEWAY_ADDRESS`. The edge proxy must target the approved gateway
+address and the published service ports; it must never target `127.0.0.1`.
+The fallback is not enabled by the default Compose command.
+
+Project Nginx is an explicit alternative only after formal approval:
+
+~~~bash
+docker compose --env-file /opt/bma/env/app.staging \
+  -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.project-edge.yml \
+  up -d
+~~~
+
+The real staging upload contract is `/opt/bma/uploads:/app/uploads`. Local
+disposable validation uses the local override and a disposable named volume.
 
 ## Migration and Required Seed
 
 Run migrations as an explicit one-off Backend container:
 
 ~~~bash
-docker compose --env-file env/app.staging -f compose.app.staging.yml run --rm backend bun run db:migrate
+docker compose --env-file env/app.staging \
+  -f compose.app.staging.yml \
+  -f compose.app.staging.external-edge.yml \
+  run --rm backend bun run db:migrate
 ~~~
 
 Run required seed only when needed:
 
 ~~~bash
-docker compose --env-file env/app.staging -f compose.app.staging.yml run --rm backend bun run db:seed:required
+docker compose --env-file env/app.staging \
+  -f compose.app.staging.yml \
+  -f compose.app.staging.external-edge.yml \
+  run --rm backend bun run db:seed:required
 ~~~
 
 Run the required seed twice during initial staging validation and verify that no duplicates are created.
@@ -205,7 +275,8 @@ proxy_set_header X-Forwarded-Proto $scheme;
 Verify the loaded configuration:
 
 ~~~bash
-docker compose --env-file env/app.staging -f compose.app.staging.yml exec nginx nginx -T
+docker inspect bma-nginx
+docker exec bma-nginx nginx -T
 ~~~
 
 Then test a real Server Action through the staging origin, for example login or registration.
@@ -296,7 +367,9 @@ Copy-Item env/app.staging.example env/app.staging.local
 Copy-Item env/db.staging.example env/db.staging.local
 ~~~
 
-Replace the local files with fake values from the repository's local examples. Do not use real VM passwords, TLS keys, or production credentials.
+Replace the local files with fake values from the repository's local examples.
+Set `UPLOAD_HOST_PATH=./.local-uploads` in the local application environment.
+Do not use real VM passwords, TLS keys, or production credentials.
 
 Validate the local Database stack:
 
@@ -367,6 +440,10 @@ The unauthenticated projects request is expected to return `401` with JSON.
 | `COOKIE_SECURE` | Backend/Frontend | `false` | `true` | No | Yes |
 | `COOKIE_SAME_SITE` | Backend/Frontend | `lax` | `lax` | No | Yes |
 | `UPLOAD_STORAGE_DIR` | Backend runtime | `/app/uploads` | `/app/uploads` | No | Yes |
+| `UPLOAD_HOST_PATH` | Application Compose | local disposable path | `/opt/bma/uploads` | No | Yes |
+| `MAX_UPLOAD_SIZE` | Backend runtime | `26214400` | `26214400` | No | Yes |
+| `TRUST_PROXY` | Backend runtime | `false` | `true` behind approved proxy | No | Yes |
+| `EDGE_NETWORK_NAME` | External-edge Compose | local network name | approved shared network | No | Yes |
 
 Rules:
 
@@ -375,6 +452,22 @@ Rules:
 - `BACKEND_URL` is server-only and must not use the `NEXT_PUBLIC_` prefix.
 - Scripts must fail clearly when required values are missing.
 - Secrets must never be printed.
+
+## CI Validation Boundary
+
+CI creates disposable environment files at runtime and removes them during
+cleanup. It does not read `env/app.staging`, `env/db.staging`, or any real
+staging secret. Compose rendering uses a CI-only disposable private address
+that is not stored in repository configuration or documentation.
+
+Backend CI starts its own disposable PostgreSQL container and temporary upload
+directory. It may run migrations only against that database. The liveness
+check runs before the database service is started; readiness runs only after
+the database is healthy, migrations complete, and upload storage is prepared.
+
+The upload readiness check atomically creates a uniquely named probe file,
+writes a constant marker, and deletes it in a `finally` block. A failed create
+or cleanup makes readiness fail.
 
 ## Known Deployment Targets
 

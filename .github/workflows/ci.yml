@@ -1,0 +1,31 @@
+name: Infrastructure CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check shell syntax
+        run: bash -n scripts/*.sh scripts/ci/*.sh
+      - name: Check Node syntax
+        run: for file in scripts/*.mjs; do node --check "$file"; done
+      - name: Render Compose configuration
+        run: bash scripts/ci/verify-compose.sh
+      - name: Scan active IP configuration
+        run: bash scripts/ci/scan-active-ip.sh
+      - name: Scan obsolete paths
+        run: bash scripts/ci/scan-obsolete-paths.sh
+      - name: Scan destructive commands
+        run: bash scripts/ci/scan-destructive-commands.sh
+      - name: Scan tracked secret files
+        run: bash scripts/ci/scan-secret-files.sh
+      - name: Check whitespace
+        run: git diff --check

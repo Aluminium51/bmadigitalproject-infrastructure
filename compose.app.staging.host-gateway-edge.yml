@@ -1,0 +1,10 @@
+# Explicit fallback for an approved edge proxy that cannot join bma_edge.
+# The edge proxy must target EDGE_HOST_GATEWAY_ADDRESS, never 127.0.0.1.
+services:
+  backend:
+    ports:
+      - "${APP_BIND_ADDRESS:?APP_BIND_ADDRESS is required}:${APP_BACKEND_PORT:-18081}:8081"
+
+  frontend:
+    ports:
+      - "${APP_BIND_ADDRESS:?APP_BIND_ADDRESS is required}:${APP_FRONTEND_PORT:-13000}:3000"

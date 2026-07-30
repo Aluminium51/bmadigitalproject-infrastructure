@@ -6,7 +6,7 @@ BACKEND_VERSION=replace-with-backend-commit-sha
 FRONTEND_IMAGE=ghcr.io/replace-with-your-org/bma-frontend
 FRONTEND_VERSION=replace-with-frontend-commit-sha
 
-DATABASE_URL=postgresql://bma_app:URL_ENCODED_PASSWORD@10.20.0.12:5432/bma_db
+DATABASE_URL=postgresql://bma_app:URL_ENCODED_PASSWORD@<DB_VM_PRIVATE_IP>:5432/bma_db
 
 PUBLIC_API_URL=https://staging.example.com/api/v1
 CORS_ORIGINS=https://staging.example.com
@@ -20,3 +20,7 @@ COOKIE_DOMAIN=
 NODE_ENV=production
 PORT=8081
 UPLOAD_STORAGE_DIR=/app/uploads
+UPLOAD_HOST_PATH=/opt/bma/uploads
+MAX_UPLOAD_SIZE=26214400
+TRUST_PROXY=true
+EDGE_NETWORK_NAME=bma_edge

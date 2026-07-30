@@ -16,6 +16,8 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080/api/v1}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:3000}
       UPLOAD_STORAGE_DIR: ${UPLOAD_STORAGE_DIR:-/app/uploads}
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-26214400}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}

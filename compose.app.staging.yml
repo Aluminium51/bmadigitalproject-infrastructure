@@ -12,6 +12,8 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:?PUBLIC_API_URL is required}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
       UPLOAD_STORAGE_DIR: /app/uploads
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:?MAX_UPLOAD_SIZE is required}
+      TRUST_PROXY: ${TRUST_PROXY:?TRUST_PROXY is required}
       COOKIE_SECURE: ${COOKIE_SECURE:?COOKIE_SECURE is required}
       COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:?COOKIE_SAME_SITE is required}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
@@ -19,7 +21,7 @@ services:
     expose:
       - "8081"
     volumes:
-      - bma_staging_uploads:/app/uploads
+      - ${UPLOAD_HOST_PATH:?UPLOAD_HOST_PATH is required}:/app/uploads
     healthcheck:
       test:
         [
@@ -65,32 +67,5 @@ services:
         max-size: "10m"
         max-file: "5"
 
-  nginx:
-    image: nginx:1.27.5-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/staging.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/proxy-common.conf:/etc/nginx/proxy-common.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_started
-    networks:
-      - app_network
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
 networks:
   app_network:
-
-volumes:
-  bma_staging_uploads:
-    name: bma_staging_uploads

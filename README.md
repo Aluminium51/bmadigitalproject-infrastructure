@@ -384,12 +384,18 @@ For the complete local validation procedure, see
 The real deployment uses two VMs:
 
 ```text
-Application VM: Nginx, Frontend, Backend
+Application VM: approved edge Nginx, Frontend, Backend
 Database VM:    PostgreSQL
 ```
 
 The database stack must be deployed separately on the Database VM. The
-application stack must never include PostgreSQL.
+application stack must never include PostgreSQL or claim ports 80/443 in its
+base Compose file. The preferred edge mode attaches the existing edge proxy
+and application services to an approved shared Docker network. The
+Project-Nginx overlay is an explicit alternative only after approval. The
+existing edge proxy must never target `127.0.0.1` for containerized services.
+An explicit host-gateway overlay exists only as a documented fallback and
+requires an approved non-loopback gateway address.
 
 Before running any remote command, confirm that VM1 and VM2 have unique,
 approved private IP addresses. The previously observed VM addresses conflicted
@@ -456,11 +462,13 @@ Pull immutable image versions and validate the Compose configuration:
 docker compose \
   --env-file /opt/bma/env/app.staging \
   -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
   config --quiet
 
 docker compose \
   --env-file /opt/bma/env/app.staging \
   -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
   pull
 ```
 
@@ -471,6 +479,7 @@ run the migration as a one-off Backend container:
 docker compose \
   --env-file /opt/bma/env/app.staging \
   -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
   run --rm backend bun run db:migrate
 ```
 
@@ -483,6 +492,7 @@ Start the application:
 docker compose \
   --env-file /opt/bma/env/app.staging \
   -f /opt/bma/infrastructure/compose.app.staging.yml \
+  -f /opt/bma/infrastructure/compose.app.staging.external-edge.yml \
   up -d
 ```
 

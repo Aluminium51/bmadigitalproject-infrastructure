@@ -1,0 +1,17 @@
+# Explicit external-edge mode. The existing edge proxy must be attached to
+# this network by an approved operator. This file never publishes host ports.
+services:
+  backend:
+    networks:
+      - app_network
+      - bma_edge
+
+  frontend:
+    networks:
+      - app_network
+      - bma_edge
+
+networks:
+  bma_edge:
+    name: ${EDGE_NETWORK_NAME:-bma_edge}
+    external: true
