@@ -22,7 +22,7 @@ real staging contract uses `/opt/bma/uploads` as a host bind mount.
 - Existing database volume preserved: `bma_staging_pg_data`
 - Existing upload volume preserved: `bma_staging_uploads`
 - Final containers: PostgreSQL healthy; Backend healthy; Frontend running; Nginx running
-- Final published ports: PostgreSQL `127.0.0.1:55432`; Nginx `0.0.0.0:8088`
+- Final published ports: PostgreSQL `127.0.0.1:55432`; Nginx `127.0.0.1:8088`
 
 ## Results
 

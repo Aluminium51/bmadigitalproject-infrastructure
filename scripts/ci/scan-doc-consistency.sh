@@ -29,4 +29,32 @@ if rg -n 'proxy_pass[[:space:]]+https?://127\.0\.0\.1|EDGE_HOST_GATEWAY_ADDRESS=
   exit 1
 fi
 
+if ! rg -q '^    image: \$\{BACKEND_IMAGE_REF:\?BACKEND_IMAGE_REF is required\}$' compose.app.staging.yml; then
+  echo "Staging Compose must use BACKEND_IMAGE_REF." >&2
+  exit 1
+fi
+
+if ! rg -q '^    image: \$\{FRONTEND_IMAGE_REF:\?FRONTEND_IMAGE_REF is required\}$' compose.app.staging.yml; then
+  echo "Staging Compose must use FRONTEND_IMAGE_REF." >&2
+  exit 1
+fi
+
+if rg -n --glob 'compose.app.staging*.yml' \
+  -e '\$\{BACKEND_IMAGE(:|_VERSION)' \
+  -e '\$\{FRONTEND_IMAGE(:|_VERSION)' \
+  -e '\$\{BACKEND_VERSION' \
+  -e '\$\{FRONTEND_VERSION'; then
+  echo "Obsolete image/version variables remain in active staging Compose." >&2
+  exit 1
+fi
+
+if rg -n --glob 'compose.app.staging.project-edge.yml' \
+  -e 'PROJECT_EDGE_HTTP_BIND_ADDRESS:-0\.0\.0\.0' \
+  -e 'PROJECT_EDGE_HTTPS_BIND_ADDRESS:-0\.0\.0\.0' \
+  -e 'PROJECT_EDGE_HTTP_PORT:-80' \
+  -e 'PROJECT_EDGE_HTTPS_PORT:-443'; then
+  echo "Project Nginx has unsafe default bind addresses or ports." >&2
+  exit 1
+fi
+
 echo "Deployment documentation and path consistency checks passed."
